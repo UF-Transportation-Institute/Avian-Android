@@ -12,6 +12,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.peertopark.java.geocalc.Coordinate;
@@ -34,6 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     TextView ipLabel;
     TextView timer;
+    TextView speed;
     TextView logLabel;
 
     boolean toListen;
@@ -46,6 +48,8 @@ public class MainActivity extends AppCompatActivity {
 
     private DecimalFormat df = new DecimalFormat("##.00");
 
+    LinearLayout dashboard;
+    LinearLayout settings;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
 
         logLabel = findViewById(R.id.logLabel);
         timer = findViewById(R.id.timer);
+        speed = findViewById(R.id.speed);
 
         listPortLabel = findViewById(R.id.listPortLabel);
         toListen = false;
@@ -78,6 +83,10 @@ public class MainActivity extends AppCompatActivity {
         suitIPLabel = findViewById(R.id.suitIPLabel);
         suitPortLabel = findViewById(R.id.suitPortLabel);
 
+        dashboard = findViewById(R.id.dashboard);
+        settings = findViewById(R.id.settings);
+        dashboard.setVisibility(View.GONE);
+        settings.setVisibility(View.VISIBLE);
     }
 
 
@@ -98,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            logLabel.setText("UDP Server is listening");
+                            logLabel.setText("UDP Server is listening\n\n\n\n\n\n\n\n");
                         }
                     });
 
@@ -135,7 +144,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
 
-        startListeningButton.setText("Connected");
+        startListeningButton.setText("Listening");
         startListeningButton.setEnabled(false);
 
     }
@@ -204,7 +213,7 @@ public class MainActivity extends AppCompatActivity {
         System.out.println("time: " + df.format(total_time) + " seconds");
         System.out.println("distance: " + df.format(total_dist) + " meters");
         logLabel.setText(logLabel.getText()+"\n\n"+ "Trajectory: TTC is " + df.format(total_time) + " sec, and distance is " + df.format(total_dist) + " meters.");
-
+        speed.setText((int)(total_dist/total_time*2.23694));
         //update Seconds Timer Display
 
         requestTrajButton.setEnabled(false);
@@ -217,12 +226,12 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onTick(final long timeLeft) {
                 Log.d("aseem","Timer: time left"+ timeLeft);
-                logLabel.setText(logLabel.getText() + "Timer: time left"+ timeLeft);
+                logLabel.setText(logLabel.getText()+ "\n\nTimer: time left"+ timeLeft);
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         long timeLeft2 = timeLeft/100;
-                        timer.setText(""+ ((int)(timeLeft2/10))+"."+(timeLeft2%10)+" Seconds");
+                        timer.setText(""+ ((int)(timeLeft2/10))+"."+(timeLeft2%10));
                     }
                 });
             }
@@ -230,17 +239,25 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onFinish() {
                 Log.d("aseem","Timer over");
-                logLabel.setText(logLabel.getText() + "Timer over");
+                timer.setText("0");
+                logLabel.setText(logLabel.getText() + "+\n\nTimer over");
                 requestTrajButton.setEnabled(true);
+                speed.setText("0");
             }
         }.start();
+        speed.setText("20");
     }
 
     public void requestTrajectory(View view) {
         requestTrajButton.setEnabled(false);
         //send UDP message
         sendUDPMessage("Served,0");
-        startTimer(5);
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        startTimer(7);
     }
 
     private void sendUDPMessage(final String msg) {
@@ -249,7 +266,7 @@ public class MainActivity extends AppCompatActivity {
 
         if(!hostIP.equals(addressRecieved) || portRecieved!=hostPort){
             Log.d("aseem", "IP and port of suitcse dont match");
-            logLabel.setText(logLabel.getText()+"IP AND PORT OF SUITCASE DON'T MATCH");
+            logLabel.setText(logLabel.getText()+"\n\nIP AND PORT OF SUITCASE DON'T MATCH");
         }
         new Thread(new Runnable() {
             @Override
@@ -277,5 +294,16 @@ public class MainActivity extends AppCompatActivity {
         toListen = false;
         //stop threads
         startListeningButton.setEnabled(true);
+    }
+
+    public void showHideSettings(View view) {
+        if(dashboard.getVisibility()==View.VISIBLE){
+            dashboard.setVisibility(View.GONE);
+            settings.setVisibility(View.VISIBLE);
+        }else {
+            settings.setVisibility(View.GONE);
+            dashboard.setVisibility(View.VISIBLE);
+        }
+
     }
 }
