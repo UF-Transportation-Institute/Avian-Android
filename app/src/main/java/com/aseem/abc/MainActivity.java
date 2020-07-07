@@ -231,7 +231,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void run() {
                         long timeLeft2 = timeLeft/100;
-                        timer.setText(""+ ((int)(timeLeft2/10))+"."+(timeLeft2%10));
+                        timer.setText(""+ ((int)(timeLeft2/10)));
                     }
                 });
             }
