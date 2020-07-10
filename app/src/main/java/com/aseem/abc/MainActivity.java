@@ -127,6 +127,13 @@ public class MainActivity extends AppCompatActivity {
 
                         Log.d("aseem","received string: "+received);
 
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                logLabel.setText("received string: "+received);
+                            }
+                        });
+
                         processString(received);
 
                         runOnUiThread(new Runnable() {
