@@ -7,6 +7,8 @@ import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.StrictMode;
 import android.util.Log;
 import android.view.View;
@@ -20,9 +22,12 @@ import com.peertopark.java.geocalc.DegreeCoordinate;
 import com.peertopark.java.geocalc.EarthCalc;
 import com.peertopark.java.geocalc.Point;
 
+import org.w3c.dom.Text;
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.text.DecimalFormat;
 import java.util.logging.Level;
 
@@ -30,8 +35,8 @@ public class MainActivity extends AppCompatActivity {
 
 
     EditText listPortLabel;
-    EditText suitIPLabel;
-    EditText suitPortLabel;
+    TextView suitIPLabel;
+    TextView suitPortLabel;
 
     TextView ipLabel;
     TextView timer;
@@ -41,10 +46,10 @@ public class MainActivity extends AppCompatActivity {
     boolean toListen;
 
     Button startListeningButton;
-    Button requestTrajButton;
+    Button stopListeningButton;
 
-    InetAddress addressRecieved;
-    int portRecieved;
+    //InetAddress addressRecieved;
+    //int portRecieved;
 
     private DecimalFormat df = new DecimalFormat("##.00");
 
@@ -79,7 +84,9 @@ public class MainActivity extends AppCompatActivity {
         listPortLabel = findViewById(R.id.listPortLabel);
         toListen = false;
         startListeningButton = findViewById(R.id.startListeningButton);
-        requestTrajButton = findViewById(R.id.requestTrajButton);
+        stopListeningButton = findViewById(R.id.stopListeningButton);
+        stopListeningButton.setEnabled(false);
+
         suitIPLabel = findViewById(R.id.suitIPLabel);
         suitPortLabel = findViewById(R.id.suitPortLabel);
 
@@ -92,6 +99,9 @@ public class MainActivity extends AppCompatActivity {
 
 
     public void startListening(View view) {
+        if(toListen) {
+            return;
+        }
         Log.d("aseem","starting listening server");
 
         toListen = true;
@@ -101,13 +111,14 @@ public class MainActivity extends AppCompatActivity {
                 try{
 //                    DatagramSocket socket = new DatagramSocket(5005);
                     DatagramSocket socket = new DatagramSocket(Integer.parseInt(listPortLabel.getText().toString()));
+                    socket.setSoTimeout(10);
 
-                    Log.d("aseem","UDP Server is listening");
+                    Log.d("aseem","UDP Server is listening at " + socket.getLocalAddress());
 
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            logLabel.setText("UDP Server is listening\n\n\n\n\n\n\n\n");
+                            logLabel.setText(logLabel.getText() + "\n\nUDP Server is listening\n\n\n\n\n\n");
                         }
                     });
 
@@ -116,8 +127,11 @@ public class MainActivity extends AppCompatActivity {
 
                         // receive request
                         DatagramPacket packet = new DatagramPacket(buf, buf.length);
-                        socket.receive(packet);     //this code block the program flow
-
+                        try {
+                            socket.receive(packet);     //this code block the program flow
+                        } catch (SocketTimeoutException se) {
+                            continue;
+                        }
                         // send the response to the client at "address" and "port"
                         final InetAddress address = packet.getAddress();
                         final int port = packet.getPort();
@@ -127,17 +141,17 @@ public class MainActivity extends AppCompatActivity {
 
                         Log.d("aseem","received string: "+received);
 
-                        processString(received);
-
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                addressRecieved = address;
-                                portRecieved = port;
+                                processString(received);
                                 logLabel.setText(logLabel.getText()+"\n\n"+received);
                             }
                         });
                     }
+
+                    socket.close();
+                    Log.d("aseem", "Closing UDP socket");
                 }catch (Exception e){
                     e.printStackTrace();
                 }
@@ -146,7 +160,18 @@ public class MainActivity extends AppCompatActivity {
 
         startListeningButton.setText("Listening");
         startListeningButton.setEnabled(false);
+        stopListeningButton.setEnabled(true);
 
+    }
+
+    public void stopListening(View view) {
+        if(!toListen) {
+            return;
+        }
+        toListen = false;
+        startListeningButton.setText("Start Listening");
+        startListeningButton.setEnabled(true);
+        stopListeningButton.setEnabled(false);
     }
 
     private void processString(String line){
@@ -156,6 +181,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         int messageId;
+        int DSRC_ID;
         double firstLat;
         double firstLon;
         int firstMinMin;
@@ -164,11 +190,12 @@ public class MainActivity extends AppCompatActivity {
 
         try {
             messageId = Integer.parseInt(list[0]);
-            firstLat = Double.parseDouble(list[1]) / 10000000;
-            firstLon = Double.parseDouble(list[2]) / 10000000;
-            firstMinMin = Integer.parseInt(list[3]);
-            firstMinMS = Integer.parseInt(list[4]);
-            offSetCount = Integer.parseInt(list[5]);
+            DSRC_ID = Integer.parseInt(list[2]);
+            firstLat = Double.parseDouble(list[3]) / 10000000;
+            firstLon = Double.parseDouble(list[4]) / 10000000;
+            firstMinMin = Integer.parseInt(list[5]);
+            firstMinMS = Integer.parseInt(list[6]);
+            offSetCount = Integer.parseInt(list[8]);
         } catch (NumberFormatException ex) {
             System.err.println("Error parsing message!");
             return;
@@ -186,10 +213,12 @@ public class MainActivity extends AppCompatActivity {
         int count = 0;
         double total_time = 0;
         double total_dist = 0;
-        for(int i = 6; i < (3 * offSetCount) + 6; i+=3) {
+        for(int i = 9; i < (3 * offSetCount) + 9; i+=3) {
             count += 1;
             nextLat += (Double.parseDouble(list[i]) / 10000000);
             nextLon += (Double.parseDouble(list[i + 1]) / 10000000);
+            Log.d("aseem","Lat,Lon: " + nextLat + "," + nextLon);
+
             time = Double.parseDouble(list[i + 2]) / 1000;
             total_time += time;
             Coordinate endLat = new DegreeCoordinate(nextLat);
@@ -210,70 +239,63 @@ public class MainActivity extends AppCompatActivity {
         //int speed_advisory = (int) Math.round(avg_mph);
         final Integer timerStart = (int) Math.round(total_time);
 
-        System.out.println("time: " + df.format(total_time) + " seconds");
-        System.out.println("distance: " + df.format(total_dist) + " meters");
+        //System.out.println("time: " + df.format(total_time) + " seconds");
+        //System.out.println("distance: " + df.format(total_dist) + " meters");
         logLabel.setText(logLabel.getText()+"\n\n"+ "Trajectory: TTC is " + df.format(total_time) + " sec, and distance is " + df.format(total_dist) + " meters.");
-        speed.setText((int)(total_dist/total_time*2.23694));
+        speed.setText( String.valueOf( (int)(total_dist/total_time*2.23694) ) );
         //update Seconds Timer Display
 
-        requestTrajButton.setEnabled(false);
         startTimer(timerStart);
 
     }
 
-    private void startTimer(Integer timerStart) {
-        new CountDownTimer(timerStart*1000, 100) {
+    private void startTimer(final Integer timerStart) {
+
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
-            public void onTick(final long timeLeft) {
-                Log.d("aseem","Timer: time left"+ timeLeft);
-                logLabel.setText(logLabel.getText()+ "\n\nTimer: time left"+ timeLeft);
-                runOnUiThread(new Runnable() {
+            public void run() {
+                new CountDownTimer(timerStart*1000, 100) {
                     @Override
-                    public void run() {
-                        long timeLeft2 = timeLeft/100;
-                        timer.setText(""+ ((int)(timeLeft2/10))+"."+(timeLeft2%10));
+                    public void onTick(final long timeLeft) {
+                        Log.d("aseem","Timer: time left"+ timeLeft);
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                //.setText(logLabel.getText()+ "\n\nTimer: time left"+ timeLeft);
+                                long timeLeft2 = timeLeft/100;
+                                timer.setText(""+ ((int)(timeLeft2/10))+"."+(timeLeft2%10));
+                            }
+                        });
                     }
-                });
-            }
 
-            @Override
-            public void onFinish() {
-                Log.d("aseem","Timer over");
-                timer.setText("0");
-                logLabel.setText(logLabel.getText() + "+\n\nTimer over");
-                requestTrajButton.setEnabled(true);
-                speed.setText("0");
+                    @Override
+                    public void onFinish() {
+                        Log.d("aseem","Timer over");
+                        timer.setText("0");
+                        //logLabel.setText(logLabel.getText() + "+\n\nTimer over");
+                        speed.setText("0");
+                    }
+                }.start();
             }
-        }.start();
-        speed.setText("20");
+        });
     }
 
-    public void requestTrajectory(View view) {
-        requestTrajButton.setEnabled(false);
-        //send UDP message
-        sendUDPMessage("Served,0");
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        startTimer(7);
-    }
-
+    // USED FOR DEBUG ONLY
     private void sendUDPMessage(final String msg) {
         final String hostIP = suitIPLabel.getText().toString();
         final int hostPort = Integer.parseInt(suitPortLabel.getText().toString());
 
-        if(!hostIP.equals(addressRecieved) || portRecieved!=hostPort){
-            Log.d("aseem", "IP and port of suitcse dont match");
-            logLabel.setText(logLabel.getText()+"\n\nIP AND PORT OF SUITCASE DON'T MATCH");
-        }
+        //if(!hostIP.equals(addressRecieved) || portRecieved!=hostPort){
+        //    Log.d("aseem", "IP and port of suitcse dont match" + hostIP + ", " + hostPort);
+        //   logLabel.setText(logLabel.getText()+"\n\nIP AND PORT OF SUITCASE DON'T MATCH");
+        //}
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try{
 
-                    Log.d("aseem","Requesting Trajectory");
+                    Log.d("aseem",msg);
 
                     DatagramSocket datagramSocket = new DatagramSocket();
 
@@ -281,6 +303,7 @@ public class MainActivity extends AppCompatActivity {
 
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length, InetAddress.getByName(hostIP), hostPort);
                     datagramSocket.send(packet);
+                    datagramSocket.close();
 
                 }catch (Exception e){
                     e.printStackTrace();
@@ -288,12 +311,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
 
-    }
-
-    public void resetServer(View view) {
-        toListen = false;
-        //stop threads
-        startListeningButton.setEnabled(true);
     }
 
     public void showHideSettings(View view) {
@@ -304,6 +321,7 @@ public class MainActivity extends AppCompatActivity {
             settings.setVisibility(View.GONE);
             dashboard.setVisibility(View.VISIBLE);
         }
-
+        // DEBUG ONLY
+        //sendUDPMessage("18,0,2900000,296231658,-823867963,57,10671,2,10,-1151,-17,1000,-1241,-24,1000,-1331,-11,1000,-1422,-7,1000,-1512,-18,1000,-1594,-18,1000,-1449,-18,1000,-1179,-8,1000,-908,15,1000,-426,14,619");
     }
 }
